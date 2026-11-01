@@ -1,0 +1,38 @@
+{
+  "description": "Extratos mínimos de uma reconstrução retrospectiva. Nenhum voto posterior ao corte de 2% nem resultado final é distribuído.",
+  "sources": [
+    {
+      "url": "https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_secao/votacao_secao_2026_BR.zip",
+      "sha256_original": "c928321f63f2d095706fca73d4607c048d2ada23bda6876455d6911aaf1bc9c1"
+    },
+    {
+      "url": "https://cdn.tse.jus.br/estatistica/sead/odsele/detalhe_votacao_secao/detalhe_votacao_secao_2026.zip",
+      "sha256_original": "8ef9ce3a85cde260471faf7a83a9b4f5ccf3993fdda942aacaa658574344789c"
+    },
+    {
+      "url": "https://cdn.tse.jus.br/estatistica/sead/odsele/detalhe_votacao_secao/detalhe_votacao_secao_2022.zip",
+      "sha256_original": "ad22c50b9e6d9dfb096a2170680a190f1734895ba89d8977b95fd63ca02c03da"
+    },
+    {
+      "url": "https://cdn.tse.jus.br/estatistica/sead/odsele/detalhe_votacao_munzona/detalhe_votacao_munzona_2014.zip",
+      "sha256_original": "f9195f8988edabd5db03fdef31ad33b21ad0f02c75c8a8fa30c468ed5642460a"
+    },
+    {
+      "url": "https://cdn.tse.jus.br/estatistica/sead/odsele/detalhe_votacao_munzona/detalhe_votacao_munzona_2018.zip",
+      "sha256_original": "df68c258a2261dff37b379f65ea5f2e8de7b3d824bb2340d8f4830274a3fabb5"
+    }
+  ],
+  "poll_url": "https://quaest.com.br/wp-content/uploads/2026/10/QUAEST9PRESIDENCIAL2110.pdf",
+  "poll_page": 19,
+  "chronology": "Reconstituída de extratos finais por horário de primeira totalização; não é um snapshot arquivado em tempo real.",
+  "trajectory_input": "Somas do primeiro turno na ordem hipotética congelada; a seleção dessa ordem não é reestimada neste projeto enxuto.",
+  "sha256": {
+    "apuracao_1pct.csv": "15fb1c3e25aa488e24848a4bbf6dd89dd30ac361f0f9d1979036bb64381bc6dd",
+    "apuracao_2pct.csv": "f0f8b052471c830c799c470d02c55fcf9848c06460c5d461c492b90d6c20de5d",
+    "baseline_2026_1t.csv": "b8dc44c0182853925f07134a00eca91362fa78814c3c6e2f78dd4023a8e995f2",
+    "fontes.json": "f8dab625533b5bb1e488699dad649336f8364d1264247c42f0a0f2b669d1049a",
+    "historico_nacional.csv": "00fb0df4ed6fe1f531b24d65244d8a31fea9c33b2c935021162730ab9b53cf3e",
+    "ordem_hipotetica_origens.csv": "879543695deb69946c8e597232f623da205697021fd464900da5448672b7345d",
+    "pesquisa_e_cortes.json": "c1f31d995ce2a595f2cacd07309b0b8d0ab59143a34dd3bd5bf990c4e968ffcd"
+  }
+}

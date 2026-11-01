@@ -1,0 +1,86 @@
+{
+  "origin_atoms": {
+    "13": 53722151.0,
+    "14": 2667307.0,
+    "16": 42730.0,
+    "21": 22272.0,
+    "22": 55960603.0,
+    "27": 39218.0,
+    "28": 5123.0,
+    "29": 14825.0,
+    "30": 323159.0,
+    "35": 16508.0,
+    "55": 2600440.0,
+    "70": 3438835.0,
+    "80": 121858.0,
+    "BN": 5959040.0,
+    "A": 32894899.0
+  },
+  "poll": {
+    "id": "quaest_20261021",
+    "publication": "2026-10-22",
+    "source_url": "https://quaest.com.br/wp-content/uploads/2026/10/QUAEST9PRESIDENCIAL2110.pdf",
+    "source_page": 19,
+    "rows": [
+      {
+        "members": [
+          "13"
+        ],
+        "lula": 95,
+        "flavio": 0,
+        "rounding_unit_pct": 1.0
+      },
+      {
+        "members": [
+          "22"
+        ],
+        "lula": 0,
+        "flavio": 94,
+        "rounding_unit_pct": 1.0
+      },
+      {
+        "members": [
+          "14",
+          "16",
+          "21",
+          "27",
+          "28",
+          "29",
+          "30",
+          "35",
+          "55",
+          "70",
+          "80"
+        ],
+        "lula": 37,
+        "flavio": 43,
+        "rounding_unit_pct": 1.0
+      },
+      {
+        "members": [
+          "BN",
+          "A"
+        ],
+        "lula": 40,
+        "flavio": 36,
+        "rounding_unit_pct": 1.0
+      }
+    ]
+  },
+  "scope": "Brasil sem exterior",
+  "domestic_sections": 497897,
+  "cuts": {
+    "1": {
+      "timestamp": "2026-10-25 19:04:21",
+      "national_pct": 0.998385436,
+      "sections": 4208,
+      "municipalities": 330
+    },
+    "2": {
+      "timestamp": "2026-10-25 19:16:39",
+      "national_pct": 1.999375,
+      "sections": 9205,
+      "municipalities": 905
+    }
+  }
+}

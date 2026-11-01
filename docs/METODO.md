@@ -1,8 +1,8 @@
-# Dos coeficientes sorteados à regressão estimada
+# Modelo linear: previsão com priors e estimação com votos
 
 **Victor Rangel · Econometria Fácil**
 
-A conta de projeção é linear nos dois momentos. O que muda é a origem dos coeficientes: antes das urnas, são sorteados; depois, são estimados com os votos disponíveis. As duas distribuições vêm de procedimentos diferentes, sem uma atualização bayesiana integral entre elas.
+Uso uma estrutura de regressão linear composicional nas duas etapas. Antes das urnas, faço previsão a priori: os coeficientes são probabilísticos, informados pela Quaest e pelas hipóteses de participação. Depois, ajusto os coeficientes aos votos observados por WLS sem prior. A primeira etapa usa o modelo para prever, mas não estima seus coeficientes a respostas eleitorais do segundo turno. As duas distribuições vêm de procedimentos diferentes, sem uma atualização bayesiana integral entre elas.
 
 ## Variáveis e fórmula de previsão
 
@@ -24,11 +24,11 @@ Para cada seção `i`, considero o eleitorado apto do primeiro turno, `N_i`. Ele
 
 Aqui, `i` é a seção, `g` é a origem no primeiro turno, `d` é o destino no segundo e `beta_gd` é seu coeficiente. O sobrescrito `(2)` identifica o segundo turno. Multiplicar `N_i × x_ig` recupera o tamanho do grupo de origem.
 
-Por exemplo, uma origem com 100 eleitores e coeficiente hipotético de 0,40 para Lula contribui com 40 votos previstos. Aplicar esse coeficiente é uma operação de previsão; estimá-lo exige respostas observadas do segundo turno.
+Por exemplo, uma origem com 100 eleitores e coeficiente hipotético de 0,40 para Lula contribui com 40 votos previstos. Posso fazer essa previsão com um coeficiente sorteado de um prior, antes de observar votos do segundo turno. Para ajustá-lo aos votos dessa eleição por WLS, preciso observar as respostas do segundo turno.
 
 Uso coeficientes nacionais, sem efeitos fixos. Não acrescento intercepto porque as cinco proporções já somam um. Os coeficientes descrevem relações entre totais de seções, sem identificar a mudança de voto de cada pessoa.
 
-## Zero urnas e os priors
+## Zero urnas: previsão a priori do modelo linear
 
 Uso as transferências declaradas na Genial/Quaest de 21/10/2026, com arquivo disponível em 22/10, antes do segundo turno. A tabela está na [página 19 do relatório](https://quaest.com.br/wp-content/uploads/2026/10/QUAEST9PRESIDENCIAL2110.pdf#page=19).
 
@@ -69,7 +69,9 @@ O código gera 100.000 cenários de participação e seleciona 10.000 deles, com
 
 Como a matriz é nacional, somar as origens antes da multiplicação dá o mesmo total que prever seção por seção e depois somar. Em cada cenário, divido os votos previstos de Lula pela soma dos votos previstos dos dois candidatos.
 
-Em 3.463 dos 10.000 cenários, Lula supera 50% dos válidos: daí os 34,63%. Não sorteio diretamente essa votação nacional e não estimo uma regressão com zero urnas. A frequência depende dos priors, das hipóteses de participação e da dispersão escolhida.
+Em 3.463 dos 10.000 cenários, Lula supera 50% dos válidos: daí os 34,63%. A distribuição vem da aplicação do modelo linear aos dados do primeiro turno, com os coeficientes sorteados. Não sorteio diretamente a votação nacional nem ajusto os coeficientes a votos observados do segundo turno nessa etapa. A frequência depende dos priors, das hipóteses de participação e da dispersão escolhida.
+
+É possível prever com priors antes de observar a resposta de uma regressão, como explica a [documentação do Stan](https://mc-stan.org/docs/stan-users-guide/posterior-predictive-checks.html#prior-predictive-checks). Aqui, a distribuição propaga a incerteza dos coeficientes e da participação até os totais projetados. O código não acrescenta um sorteio separado de erro eleitoral nessa etapa; portanto, não se presume que todos os riscos sobre o resultado real estejam cobertos.
 
 ## Primeiras urnas e estimação por WLS
 

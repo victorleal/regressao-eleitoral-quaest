@@ -2,14 +2,14 @@
 
 **Victor Rangel · Econometria Fácil**
 
-Uso o primeiro turno para projetar o segundo em dois momentos:
+Uso um **modelo linear para projetar o segundo turno a partir do primeiro**. Antes das urnas, faço previsão a priori com coeficientes probabilísticos; depois, ajusto os coeficientes aos votos disponíveis:
 
 | Informação disponível | De onde vêm os coeficientes? | Como gero as previsões? |
 |---|---|---|
-| Zero urnas do segundo turno | Sorteios informados pela Quaest e por hipóteses de participação | Aplico 10.000 matrizes sorteadas ao primeiro turno |
+| Zero urnas do segundo turno | Priors informados pela Quaest e por hipóteses de participação | Previsão a priori do modelo linear: aplico 10.000 matrizes sorteadas ao primeiro turno |
 | Primeiras urnas do segundo turno | Estimação por mínimos quadrados ponderados com restrições, ou WLS | Estimo a regressão e faço 600 reestimações por bootstrap municipal |
 
-**Com zero urnas, a distribuição já é o resultado de aplicar os coeficientes sorteados ao primeiro turno.** Não existe uma regressão estimada com zero urnas nem uma etapa intermediária descartada. Depois das primeiras urnas, estimo os coeficientes só com os votos disponíveis no corte, sem usar a Quaest.
+**Com zero urnas, o modelo linear já produz previsões.** Seus coeficientes vêm dos priors e ainda não foram ajustados a votos observados do segundo turno. Aplico cada matriz ao primeiro turno e obtenho a distribuição das projeções: média de 49,47% e 3.463/10.000 cenários acima de 50% (34,63%). Não há uma regressão adicional estimada nem uma etapa descartada. Depois das primeiras urnas, estimo os coeficientes por WLS só com os votos disponíveis no corte, sem Quaest. Essa implementação não faz uma atualização bayesiana integral entre as duas etapas.
 
 É uma reconstrução retrospectiva de 2026, com implementação própria inspirada nas explicações de Rodrigo Mahlmeister. Os horários limitam os votos de cada ajuste, mas os extratos vieram de arquivos finais. A especificação foi escolhida conhecendo o desfecho; este exercício não equivale a uma previsão registrada ao vivo.
 
@@ -64,9 +64,9 @@ Os placares projetados consideram o **Brasil sem exterior**. O avanço que defin
 | Menos de 1%: 0,9984% | 4.208 | 51,67% | 51,28% a 51,98% | 600/600 |
 | Aproximadamente 2%: 1,9994% | 9.205 | 51,65% | 51,30% a 51,95% | 600/600 |
 
-Os cortes são de **25/10/2026, às 19:04:21 e 19:16:39**, nos horários registrados pelo TSE. Cada arquivo contém apenas as seções observadas até seu corte. O resultado final não está no pacote.
+Os cortes são de **25/10/2026, às 19:04:21 e 19:16:39**, nos horários registrados pelo TSE. Cada arquivo contém apenas as seções observadas até seu corte. O resultado final não entra nos arquivos de dados usados pelo modelo. O PDF o apresenta separadamente para avaliação.
 
-![Distribuições: simulações com priors antes das urnas e reestimações por WLS depois dos primeiros votos](figuras/distribuicoes.png)
+![Modelo linear: previsão a priori antes das urnas e reestimações por WLS depois dos primeiros votos](figuras/distribuicoes.png)
 
 Os painéis têm escalas próprias. O recorte do gráfico inicial omite algumas caudas; médias, faixas e frequências usam todos os resultados calculados.
 
@@ -78,7 +78,7 @@ Cada seção tem cinco grupos de origem no primeiro turno: Lula, Flávio, outros
 votos previstos = soma de (eleitores da origem × coeficiente para o candidato)
 ```
 
-Com zero urnas, os coeficientes são sorteados. Com urnas, são estimados por WLS. Uso a mesma matriz em todas as seções, sem intercepto adicional e sem efeitos fixos de município ou UF.
+A relação é linear nos coeficientes nas duas etapas. Com zero urnas, uso priors para gerar esses coeficientes e prever. Com urnas, estimo-os por WLS. As explicativas do primeiro turno, sozinhas, não ajustam os coeficientes que ligam os dois turnos. Uso a mesma matriz em todas as seções, sem intercepto adicional e sem efeitos fixos de município ou UF.
 
 Com a apuração em andamento, mantenho fixos os votos contados e prevejo só as pendências:
 
@@ -103,7 +103,13 @@ Não entram votos futuros do segundo turno. A curva depende da ordem hipotética
 
 ## O que mudou em relação à primeira versão
 
-Inicialmente, mantinha o prior Quaest como penalização também depois das primeiras urnas. Ao retirá-lo, as médias ficaram próximas: **51,671% para 51,674%** no corte de menos de 1%; **51,643% para 51,645%** no de aproximadamente 2%. Nesse teste, os dados observados já dominavam a previsão nacional. A versão atual mantém a Quaest apenas na simulação com zero urnas. Essa revisão simplifica o ajuste, sem um ganho relevante de acurácia sobre a versão anterior.
+Inicialmente, mantinha o prior Quaest como penalização também depois das primeiras urnas. Ao retirá-lo, as médias ficaram próximas: **51,671% para 51,674%** no corte de menos de 1%; **51,643% para 51,645%** no de aproximadamente 2%. Nesse teste, os dados observados já dominavam a previsão nacional. A versão atual mantém a Quaest apenas na previsão a priori do modelo linear, com zero urnas. Essa revisão simplifica o ajuste, sem um ganho relevante de acurácia sobre a versão anterior.
+
+Esta revisão esclarece a descrição do método, **sem mudar coeficientes, sorteios ou resultados**. O [PDF técnico v30](docs/artigo_modelo_linear_priors_v30.pdf) mantém também a análise histórica de incerteza de v29; as faixas da tabela acima continuam sendo as distribuições originais. O piso histórico amplia intervalos sem gerar novos sorteios ou validar os 34,63% iniciais.
+
+Monte Carlo é a técnica usada para simular os cenários; não é uma alternativa incompatível com regressão. Este exercício não demonstra superioridade geral de uma família de modelos.
+
+O [texto da comunidade com as seis imagens](docs/comunidade/TEXTO.md) apresenta a mesma explicação em linguagem mais conversada.
 
 ## Arquivos e saídas
 

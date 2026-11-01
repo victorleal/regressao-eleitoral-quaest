@@ -155,6 +155,10 @@ Para representar variação amostral, faço **600 reamostragens dos municípios 
 
 A faixa de 95% resume os quantis dos bootstraps. O conjunto de municípios que chegou cedo não é uma amostra aleatória do país, então essa dispersão não cobre automaticamente o risco de extrapolar para locais ainda ausentes.
 
+### Nota sobre a revisão do método
+
+Na primeira versão, eu mantinha o prior da Quaest também depois das primeiras urnas, como penalização no ajuste. Testei sua retirada e as previsões ficaram praticamente iguais: com cerca de 1% nacional, a média foi de 51,671% para 51,674%; com cerca de 2%, de 51,643% para 51,645%. Nesse teste, os dados observados já dominavam a previsão nacional. Por isso, deixei a Quaest apenas na simulação com zero urnas e simplifiquei a estimação após os primeiros votos. Registro a mudança para preservar a comparação com a versão anterior; ela não representa um ganho relevante de acurácia.
+
 ## Da regressão ao placar nacional
 
 Eu mantenho fixos os votos já contados. Só os pendentes são estimados:

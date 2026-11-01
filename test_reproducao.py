@@ -1,5 +1,7 @@
 """Testes do corte de informação, sem dependências extras de teste."""
 from pathlib import Path
+import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -10,6 +12,12 @@ ROOT = Path(__file__).resolve().parent
 
 
 class InformationCutTests(unittest.TestCase):
+    def test_hashes_dos_insumos(self):
+        manifest = json.loads((ROOT / "dados/fontes.json").read_text(encoding="utf-8"))
+        for name, expected in manifest["sha256"].items():
+            actual = hashlib.sha256((ROOT / "dados" / name).read_bytes()).hexdigest()
+            self.assertEqual(actual, expected, name)
+
     def run_isolated(self, cut, future_timestamp=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

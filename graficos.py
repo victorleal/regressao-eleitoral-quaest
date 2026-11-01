@@ -32,7 +32,7 @@ def salvar_distribuicoes(scenarios, output):
     plt.close(fig)
 
 
-def salvar_trajetoria(order, result, n_total, output):
+def salvar_trajetoria(order, result, n_total, output, cut):
     origins = order[["L1", "F1", "O1", "BN1", "A1"]].to_numpy(dtype=float)
     totals = np.einsum("ko,bod->bkd", origins, result["draws"][:, :, :2]) + result["counted_lf"]
     lula = 100 * totals[:, :, 0] / totals.sum(axis=2)
@@ -41,7 +41,7 @@ def salvar_trajetoria(order, result, n_total, output):
     lower, upper = np.quantile(lula, [0.025, 0.975], axis=0)
     frame = pd.DataFrame({"secoes_domesticas_pct": x, "lula_media_pct": mean,
                           "flavio_media_pct": 100 - mean, "lula_p025": lower, "lula_p975": upper})
-    frame.to_csv(output / "trajetoria.csv", index=False)
+    frame.to_csv(output / f"trajetoria_{cut}pct.csv", index=False)
     np.testing.assert_allclose(lula[:, -1], result["theta"], rtol=0, atol=1e-10)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(x, mean, color=PURPLE, linewidth=2, label=f"Lula · {mean[-1]:.2f}%")
@@ -56,5 +56,5 @@ def salvar_trajetoria(order, result, n_total, output):
     ax.legend(frameon=False)
     fig.tight_layout()
     for extension in ("png", "svg"):
-        fig.savefig(output / f"trajetoria.{extension}", dpi=220, facecolor="white")
+        fig.savefig(output / f"trajetoria_{cut}pct.{extension}", dpi=220, facecolor="white")
     plt.close(fig)

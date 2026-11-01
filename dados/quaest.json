@@ -1,0 +1,51 @@
+{
+  "id": "quaest_20261021",
+  "publication": "2026-10-22",
+  "source_url": "https://quaest.com.br/wp-content/uploads/2026/10/QUAEST9PRESIDENCIAL2110.pdf",
+  "source_page": 19,
+  "rows": [
+    {
+      "members": [
+        "13"
+      ],
+      "lula": 95,
+      "flavio": 0,
+      "rounding_unit_pct": 1.0
+    },
+    {
+      "members": [
+        "22"
+      ],
+      "lula": 0,
+      "flavio": 94,
+      "rounding_unit_pct": 1.0
+    },
+    {
+      "members": [
+        "14",
+        "16",
+        "21",
+        "27",
+        "28",
+        "29",
+        "30",
+        "35",
+        "55",
+        "70",
+        "80"
+      ],
+      "lula": 37,
+      "flavio": 43,
+      "rounding_unit_pct": 1.0
+    },
+    {
+      "members": [
+        "BN",
+        "A"
+      ],
+      "lula": 40,
+      "flavio": 36,
+      "rounding_unit_pct": 1.0
+    }
+  ]
+}

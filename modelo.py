@@ -1,16 +1,14 @@
 """As contas do exercício: prior, regressão composicional e previsão.
 
 Origens (linhas de beta): Lula, Flávio, Outros, branco/nulo, ausência no 1º turno.
-Destinos (colunas de beta): Lula, Flávio, branco/nulo, ausência no 2º turno.
-Não há intercepto extra nem efeitos fixos. Só L/F são respostas observadas.
+Zero urnas: quatro destinos sorteados, com Quaest e hipóteses de participação.
+Com urnas: só Lula/Flávio são estimados, por WLS restrita sem pesquisa ou prior.
+Não há intercepto extra nem efeitos fixos.
 """
 import numpy as np
 
 ORIGENS = ["Lula", "Flávio", "Outros", "Branco/nulo", "Ausência"]
 DESTINOS = ["Lula", "Flávio", "Branco/nulo", "Ausência"]
-GRADE_LAMBDA = np.array([0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0])
-SEED_FOLDS = 20261029011
-SEED_PRIOR = 20261029012
 SEED_BOOTSTRAP = 20261029013
 N_CENARIOS = 600
 
@@ -136,54 +134,66 @@ def criar_prior(protocol, historico, primeiro_turno):
     return beta, total_origins
 
 
-def ajustar_regressao(G, H, prior, lam, start=None):
-    """Minimiza mínimos quadrados ponderados + lambda * KL(prior || beta).
+def ajustar_sem_prior(G, H, start=None):
+    """WLS convexa: beta_L >= 0, beta_F >= 0, beta_L + beta_F <= 1.
 
-    G = X'WX; H = X'WY (colunas BN/A são zeros de armazenamento).
-    Cada linha de beta é positiva e soma 1. Só L/F entram no erro quadrático.
-    Uso Newton com busca de passo; a dimensão do sistema é apenas 15.
+    Só os dois candidatos são estimados. O residual BN + ausência não é
+    separado: não há respostas que identifiquem essa divisão.
     """
-    mask = np.array([1.0, 1.0, 0.0, 0.0])
-    G = 0.5 * (G + G.T)
-    beta = prior.copy() if start is None else start.copy()
-    beta /= beta.sum(axis=1, keepdims=True)
-    # A quarta coluna é 1 menos a soma das três primeiras, em cada linha.
-    Z = np.zeros((20, 15))
+    from scipy.optimize import minimize, LinearConstraint, Bounds
+
+    A = np.zeros((5, 10))
     for g in range(5):
-        Z[4*g:4*g+3, 3*g:3*g+3] = np.eye(3)
-        Z[4*g+3, 3*g:3*g+3] = -1
-    quadratic = np.kron(G, np.diag(mask))
+        A[g, 2*g:2*g+2] = 1
+    initial = np.full((5, 2), 0.25) if start is None else start
+    scale = max(1.0, float(np.max(abs(G))))
 
-    def objective(b):
-        return float(0.5 * np.sum(b * (G @ b) * mask) - np.sum(H * b)
-                     + lam * np.sum(prior * (np.log(prior) - np.log(b))))
+    def objective(z):
+        beta = z.reshape(5, 2)
+        return float(0.5 * np.sum(beta * (G @ beta)) - np.sum(H * beta)) / scale
 
-    for _ in range(351):
-        gradient = (G @ beta) * mask - H - lam * prior / beta
-        projected = gradient - gradient.mean(axis=1, keepdims=True)
-        scale = 1 + max(float(np.abs((G @ beta) * mask).max()),
-                        float(np.abs(H).max()), float(np.abs(lam * prior / beta).max()))
-        if np.abs(projected).max() / scale <= 1e-9:
-            return beta
-        hessian = quadratic + np.diag((lam * prior / beta**2).ravel())
-        reduced_gradient = Z.T @ gradient.ravel()
-        reduced_direction = np.linalg.solve(Z.T @ hessian @ Z, -reduced_gradient)
-        direction = (Z @ reduced_direction).reshape(5, 4)
-        slope = float(reduced_gradient @ reduced_direction)
-        negative = direction < 0
-        step = min(1.0, 0.99 * float(np.min(-beta[negative] / direction[negative]))) if negative.any() else 1.0
-        current = objective(beta)
-        for _ in range(80):
-            trial = beta + step * direction
-            if (trial > 0).all():
-                trial /= trial.sum(axis=1, keepdims=True)
-                if objective(trial) <= current + 1e-4 * step * slope + 1e-13 * (1 + abs(current)):
-                    beta = trial
-                    break
-            step *= 0.5
-        else:
-            raise RuntimeError("Não encontrei um passo que reduza a função objetivo.")
-    raise RuntimeError("A regressão não convergiu.")
+    def gradient(z):
+        return (G @ z.reshape(5, 2) - H).ravel() / scale
+
+    fit = minimize(objective, initial.ravel(), jac=gradient, method="SLSQP",
+                   bounds=Bounds(np.zeros(10), np.ones(10)),
+                   constraints=[LinearConstraint(A, -np.inf, 1)],
+                   options={"ftol": 1e-13, "maxiter": 400})
+    if not fit.success:
+        raise RuntimeError(fit.message)
+    beta = fit.x.reshape(5, 2)
+    # Identificadas as restrições ativas, resolvo o sistema linear de KKT.
+    # Isso remove o erro numérico associado ao ponto inicial do otimizador.
+    active, values = [], []
+    for index in np.flatnonzero(beta.ravel() < 1e-7):
+        row = np.zeros(10)
+        row[index] = 1
+        active.append(row)
+        values.append(0.0)
+    for g in np.flatnonzero(beta.sum(axis=1) > 1 - 1e-7):
+        active.append(A[g])
+        values.append(1.0)
+    if active:
+        C = np.asarray(active)
+        Q = np.kron(G, np.eye(2))
+        system = np.block([[Q, C.T], [C, np.zeros((len(C), len(C)))]])
+        beta = np.linalg.solve(system, np.r_[H.ravel(), values])[:10].reshape(5, 2)
+    else:
+        beta = np.linalg.solve(G, H)
+    if beta.min() < -1e-9 or beta.sum(axis=1).max() > 1 + 1e-9:
+        raise RuntimeError("Solução fora das restrições composicionais.")
+    grad = G @ beta - H
+    multipliers = np.zeros(5)
+    for g in range(5):
+        if beta[g].sum() > 1 - 1e-7:
+            multipliers[g] = -np.mean(grad[g, beta[g] > 1e-7])
+    reduced = grad + multipliers[:, None]
+    kkt = max(float(np.max(abs(reduced[beta > 1e-7]))),
+              float(np.max(np.maximum(-reduced[beta <= 1e-7], 0))) if (beta <= 1e-7).any() else 0,
+              float(np.max(np.maximum(-multipliers, 0)))) / scale
+    if kkt >= 3e-6:
+        raise RuntimeError(f"Condições de ótimo não satisfeitas: {kkt}")
+    return beta, kkt
 
 
 def prever(beta, pending_origins, counted_lf):
@@ -193,20 +203,21 @@ def prever(beta, pending_origins, counted_lf):
     return 100 * totals[:, 0] / totals.sum(axis=1)
 
 
-def atualizar_com_apuracao(frame, prior, total_origins, progress=print):
-    """CV por município, ajuste pontual e 600 pares prior/bootstrap municipal."""
+def atualizar_com_apuracao(frame, total_origins, progress=print):
+    """Estima só com as urnas do corte e faz 600 bootstraps municipais.
+
+    Esta função não recebe prior, pesquisa, coeficientes iniciais externos
+    ou parâmetro de penalização. O ponto inicial é uma constante neutra.
+    """
     counts = frame[["L1", "F1", "O1", "BN1", "A1"]].to_numpy(dtype=float)
     N = counts.sum(axis=1)
     X = counts / N[:, None]
     lf = frame[["L2", "F2"]].to_numpy(dtype=float)
-    Y = np.zeros((len(X), 4))
-    Y[:, :2] = lf / N[:, None]  # BN/A não viram respostas artificiais.
+    Y = lf / N[:, None]
     clusters, codes = np.unique(frame.municipio.to_numpy(), return_inverse=True)
     n_clusters = len(clusters)
-    folds = np.empty(n_clusters, dtype=int)
-    folds[np.random.default_rng(SEED_FOLDS).permutation(n_clusters)] = np.arange(n_clusters) % 5
     Gg = np.zeros((n_clusters, 5, 5))
-    Hg = np.zeros((n_clusters, 5, 4))
+    Hg = np.zeros((n_clusters, 5, 2))
     Ng = np.zeros(n_clusters)
     Mg = np.zeros(n_clusters)
     for g in range(n_clusters):
@@ -215,38 +226,23 @@ def atualizar_com_apuracao(frame, prior, total_origins, progress=print):
         Gg[g] = x.T @ (n[:, None] * x)
         Hg[g] = x.T @ (n[:, None] * Y[take])
         Ng[g], Mg[g] = n.sum(), take.sum()
-
-    def normalize(g, h, n, m):
-        return g / (n / m), h / (n / m)
-
-    mu = prior.mean(axis=0)
-    cv = []
-    for lam in GRADE_LAMBDA:
-        error = 0.0
-        for fold in range(5):
-            train, held = folds != fold, folds[codes] == fold
-            g, h = normalize(Gg[train].sum(axis=0), Hg[train].sum(axis=0), Ng[train].sum(), Mg[train].sum())
-            beta = ajustar_regressao(g, h, mu, float(lam))
-            residual = Y[held, :2] - (X[held] @ beta)[:, :2]
-            error += float(np.sum(N[held] * np.sum(residual**2, axis=1)))
-        cv.append({"lambda": float(lam), "erro_cv": error / N.sum()})
-    lam = min(cv, key=lambda row: row["erro_cv"])["lambda"]
-    G, H = normalize(Gg.sum(axis=0), Hg.sum(axis=0), Ng.sum(), Mg.sum())
-    point = ajustar_regressao(G, H, mu, lam)
-    chosen = np.random.default_rng(SEED_PRIOR).choice(len(prior), size=N_CENARIOS, replace=False)
-    multipliers = np.random.default_rng(SEED_BOOTSTRAP).multinomial(n_clusters, np.full(n_clusters, 1/n_clusters), size=N_CENARIOS)
-    draws = np.empty((N_CENARIOS, 5, 4))
+    scale = Ng.sum() / Mg.sum()
+    point, max_kkt = ajustar_sem_prior(Gg.sum(axis=0)/scale, Hg.sum(axis=0)/scale)
+    multipliers = np.random.default_rng(SEED_BOOTSTRAP).multinomial(
+        n_clusters, np.full(n_clusters, 1/n_clusters), size=N_CENARIOS)
+    draws = np.empty((N_CENARIOS, 5, 2))
     for j, mult in enumerate(multipliers):
-        g, h = normalize(np.einsum("g,gij->ij", mult, Gg), np.einsum("g,gij->ij", mult, Hg), float(mult @ Ng), float(mult @ Mg))
-        draws[j] = ajustar_regressao(g, h, prior[chosen[j]], lam, start=point)
+        scale = float(mult @ Ng) / float(mult @ Mg)
+        g = np.einsum("g,gij->ij", mult, Gg) / scale
+        h = np.einsum("g,gij->ij", mult, Hg) / scale
+        draws[j], kkt = ajustar_sem_prior(g, h, start=point)
+        max_kkt = max(max_kkt, kkt)
         if (j + 1) % 200 == 0:
-            progress(f"  {j + 1}/{N_CENARIOS} reajustes concluídos")
+            progress(f"  {j + 1}/{N_CENARIOS} bootstraps concluídos")
     pending = total_origins - counts.sum(axis=0)
     counted = lf.sum(axis=0)
-    return {
-        "draws": draws, "point": point, "lambda": lam, "cv": cv,
-        "theta": prever(draws, pending, counted),
-        "point_theta": float(prever(point[None], pending, counted)[0]),
-        "n_sections": len(frame), "n_municipalities": n_clusters,
-        "counted_lf": counted,
-    }
+    return {"draws": draws, "point": point,
+            "theta": prever(draws, pending, counted),
+            "point_theta": float(prever(point[None], pending, counted)[0]),
+            "n_sections": len(frame), "n_municipalities": n_clusters,
+            "counted_lf": counted, "max_kkt": max_kkt}

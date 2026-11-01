@@ -25,7 +25,8 @@ def resumo(cut, theta, result=None):
         "p025": float(np.quantile(theta, 0.025)), "p975": float(np.quantile(theta, 0.975)),
         "n_cenarios": len(theta), "acima_50": int((theta > 50).sum()),
         "fracao_acima_50_pct": float(100 * np.mean(theta > 50)),
-        "lambda": None if result is None else result["lambda"],
+        "metodo": "Simulação com Quaest" if result is None else "WLS restrita sem prior",
+        "previsao_pontual_pct": None if result is None else result["point_theta"],
         "secoes": 0 if result is None else result["n_sections"],
         "municipios": 0 if result is None else result["n_municipalities"],
     }
@@ -41,9 +42,8 @@ def conferir_referencia(rows, matrices):
         assert row["acima_50"] == target["n_lula_gt50"]
         assert row["n_cenarios"] == target["n_draws"]
         if row["corte"] != "0":
-            assert row["lambda"] == target["lambda"]
             np.testing.assert_allclose(matrices[row["corte"]], reference["point_coefficients"][row["corte"]], atol=1e-7, rtol=0)
-    print("Referência conferida: previsões, contagens, intervalos, lambda e coeficientes.")
+    print("Referência conferida: previsões, contagens, intervalos e coeficientes.")
 
 
 def main():
@@ -57,18 +57,23 @@ def main():
     output = args.saida.resolve()
     output.mkdir(parents=True, exist_ok=True)
     data = ROOT / "dados"
-    # Zero urnas: só estes três insumos anteriores ao segundo turno são lidos.
-    inputs = ["pesquisa_e_cortes.json", "historico_nacional.csv", "baseline_2026_1t.csv"]
+    # As etapas com apuração não abrem pesquisa nem histórico de participação.
+    inputs = ["primeiro_turno_e_cortes.json"]
     protocol = json.loads((data / inputs[0]).read_text(encoding="utf-8"))
-    history = pd.read_csv(data / inputs[1])
-    baseline = pd.read_csv(data / inputs[2]).iloc[0]
-    if set(history.ano) != {2014, 2018, 2022} or len(history) != 3:
-        raise ValueError("O histórico precisa conter somente 2014, 2018 e 2022.")
-    if baseline.ano != 2026 or protocol["poll"]["publication"] >= "2026-10-25":
-        raise ValueError("Baseline ou pesquisa fora da janela anterior ao segundo turno.")
-    print("Gerando 10.000 cenários de prior, sem abrir dados da apuração…", flush=True)
-    prior, national_origins = criar_prior(protocol, history, baseline)
-    theta0 = prever(prior, national_origins, np.zeros(2))
+    national_origins = np.array(protocol["national_origin_counts"], dtype=float)
+    if args.corte in ["0", "todos"]:
+        inputs += ["quaest.json", "historico_nacional.csv", "baseline_2026_1t.csv"]
+        poll = json.loads((data / "quaest.json").read_text(encoding="utf-8"))
+        history = pd.read_csv(data / "historico_nacional.csv")
+        baseline = pd.read_csv(data / "baseline_2026_1t.csv").iloc[0]
+        if set(history.ano) != {2014, 2018, 2022} or len(history) != 3:
+            raise ValueError("O histórico precisa conter somente 2014, 2018 e 2022.")
+        if baseline.ano != 2026 or poll["publication"] >= "2026-10-25":
+            raise ValueError("Baseline ou pesquisa fora da janela anterior ao segundo turno.")
+        print("Gerando 10.000 cenários com Quaest, sem abrir dados da apuração…", flush=True)
+        prior, prior_origins = criar_prior({**protocol, "poll": poll}, history, baseline)
+        np.testing.assert_array_equal(prior_origins, national_origins)
+        theta0 = prever(prior, national_origins, np.zeros(2))
     scenarios, rows, coefficients, matrices, results = {}, [], [], {}, {}
     cuts = ["0", "1", "2"] if args.corte == "todos" else [args.corte]
     for cut in cuts:
@@ -88,38 +93,39 @@ def main():
             if not np.isfinite(counts).all() or (counts < 0).any() or (counts[:, :5].sum(axis=1) <= 0).any():
                 raise ValueError("Contagens inválidas.")
             print(f"Ajustando corte de ≈{cut}%: {len(frame):,} seções…", flush=True)
-            result = atualizar_com_apuracao(frame, prior, national_origins)
+            result = atualizar_com_apuracao(frame, national_origins)
             results[cut] = result
             draws, point, theta = result["draws"], result["point"], result["theta"]
-            pd.DataFrame(result["cv"]).to_csv(output / f"validacao_cruzada_{cut}pct.csv", index=False)
-        np.testing.assert_allclose(draws.sum(axis=2), 1, rtol=0, atol=1e-10)
-        assert (draws > 0).all()
+        if cut == "0":
+            np.testing.assert_allclose(draws.sum(axis=2), 1, rtol=0, atol=1e-10)
+            assert (draws > 0).all()
+        else:
+            assert draws.min() >= -1e-9 and draws.sum(axis=2).max() <= 1 + 1e-9
         scenarios[cut], matrices[cut] = theta, point
         rows.append(resumo(cut, theta, result))
         pd.DataFrame({"cenario": np.arange(1, len(theta)+1), "lula_pct": theta}).to_csv(output / f"cenarios_{cut}pct.csv", index=False)
         np.savez_compressed(output / f"coeficientes_{cut}pct.npz", beta=draws, beta_pontual=point)
         for g, origin in enumerate(ORIGENS):
-            for d, destination in enumerate(DESTINOS):
+            for d, destination in enumerate(DESTINOS[:draws.shape[2]]):
                 coefficients.append({"corte": cut, "origem": origin, "destino": destination,
-                                     "prior_media": float(prior[:, g, d].mean()),
                                      "beta_pontual": float(point[g, d]), "media_cenarios": float(draws[:, g, d].mean()),
                                      "p025": float(np.quantile(draws[:, g, d], 0.025)), "p975": float(np.quantile(draws[:, g, d], 0.975))})
     table = pd.DataFrame(rows)
     table.to_csv(output / "previsoes.csv", index=False)
     pd.DataFrame(coefficients).to_csv(output / "coeficientes.csv", index=False)
     salvar_distribuicoes(scenarios, output)
-    if "2" in results:
-        name = "ordem_hipotetica_origens.csv"
+    for cut, result in results.items():
+        name = f"ordem_hipotetica_{cut}pct.csv"
         inputs.append(name)
         order = pd.read_csv(data / name)
-        salvar_trajetoria(order, results["2"], protocol["domestic_sections"], output)
+        salvar_trajetoria(order, result, protocol["domestic_sections"], output, cut)
     print("\n" + table.to_string(index=False, float_format=lambda x: f"{x:.6f}"))
     if args.verificar:
         conferir_referencia(rows, matrices)
     execution = {
         "corte": args.corte, "resultados": rows,
         "insumos_lidos_sha256": {name: hashlib.sha256((data/name).read_bytes()).hexdigest() for name in inputs},
-        "interpretacao": "Frequências condicionais aos priors e ao bootstrap. Não são amostras de um posterior MCMC nem probabilidades empiricamente calibradas.",
+        "interpretacao": "Zero urnas: cenários condicionais aos priors. Com apuração: bootstrap municipal de regressão sem prior. Frequências não calibradas em várias eleições.",
     }
     (output / "execucao.json").write_text(json.dumps(execution, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"\nArquivos gerados em: {output}")

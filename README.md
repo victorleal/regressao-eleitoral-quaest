@@ -2,7 +2,7 @@
 
 **Victor Rangel · Econometria Fácil**
 
-Uma parcial eleitoral mostra quem já foi contado. Para estimar quem ainda falta, eu preciso de um modelo. Neste exercício, uso o perfil de primeiro turno de cada seção e uma pesquisa de transferência de votos da Quaest. Antes da apuração, o modelo gera cenários a partir desses priors. Quando chegam os primeiros resultados, eu reestimo os coeficientes e projeto as seções pendentes.
+Uma parcial eleitoral mostra quem já foi contado. Para estimar quem ainda falta, eu preciso de um modelo. Neste exercício, uso o perfil de primeiro turno de cada seção e uma pesquisa de transferência de votos da Quaest. Antes da apuração, o modelo gera cenários a partir desses priors. Quando chegam os primeiros resultados, estimo uma regressão ponderada sem prior e projeto as seções pendentes.
 
 Este repositório é a versão pequena e reproduzível do meu artigo: **três arquivos Python, dados em CSV e um comando**. Os coeficientes são recalculados; as previsões publicadas não entram no ajuste.
 
@@ -30,14 +30,14 @@ Ative o ambiente:
 source .venv/bin/activate
 ```
 
-Instale as três dependências e rode:
+Instale as quatro dependências e rode:
 
 ```bash
 python -m pip install -r requirements.txt
 python reproduzir.py --verificar
 ```
 
-O comando refaz o prior, escolhe a penalização por validação cruzada, estima as regressões e gera tabelas e gráficos em `resultados/`. A opção `--verificar` compara os resultados com a referência **depois de estimar**. Sem essa opção, a referência nem é aberta.
+O comando refaz a simulação com zero urnas, estima as regressões sem prior e gera tabelas e gráficos em `resultados/`. A opção `--verificar` compara os resultados com a referência **depois de estimar**. Sem essa opção, a referência nem é aberta.
 
 Para estudar uma etapa isolada:
 
@@ -47,7 +47,7 @@ python reproduzir.py --corte 1 --saida resultados/um
 python reproduzir.py --corte 2 --saida resultados/dois
 ```
 
-`--corte 0` funciona mesmo sem os dois arquivos de apuração. `--corte 1` não abre o arquivo de 2%. Os testes verificam isso:
+`--corte 0` funciona mesmo sem os dois arquivos de apuração. `--corte 1` não abre o arquivo de 2%, a pesquisa Quaest nem o histórico de participação. A etapa com urnas funciona sem esses arquivos. Os testes verificam isso:
 
 ```bash
 python -m unittest -v
@@ -60,8 +60,8 @@ O placar considera **Brasil sem exterior**. Os cortes de 1% e 2% são definidos 
 | Informação disponível | Seções domésticas | Média de Lula nos válidos | Faixa central de 95% dos cenários | Cenários acima de 50% |
 |---|---:|---:|---:|---:|
 | Zero urnas | 0 | 49,47% | 45,65%–53,65% | 3.463/10.000 = 34,63% |
-| ≈1% nacional | 4.208 | 51,67% | 51,28%–51,97% | 600/600 |
-| ≈2% nacional | 9.205 | 51,64% | 51,29%–51,94% | 600/600 |
+| ≈1% nacional | 4.208 | 51,67% | 51,28%–51,98% | 600/600 |
+| ≈2% nacional | 9.205 | 51,65% | 51,30%–51,95% | 600/600 |
 
 Horários do TSE: **25/10/2026 às 19:04:21** e **19:16:39**, respectivamente. Os arquivos contêm apenas as seções observadas até cada corte. Não há votos posteriores a 2% nem resultado final no pacote.
 
@@ -94,11 +94,11 @@ $$
 
 - $i$: seção eleitoral.
 - $g$: grupo de origem no primeiro turno.
-- $d$: destino no segundo turno — Lula, Flávio, branco/nulo ou ausência.
+- $d$: destino no segundo turno. Na simulação inicial são quatro destinos: Lula, Flávio, branco/nulo ou ausência. Na regressão com urnas, são as duas respostas Lula e Flávio.
 - $\beta_{gd}$: coeficiente da origem $g$ para o destino $d$.
 - $\widehat V_{2id}$: quantidade prevista de votos ou ausências no destino $d$.
 
-É linear nos coeficientes. A matriz $\beta$ tem **5 linhas e 4 colunas**, com coeficientes positivos e soma 1 em cada linha. Não adiciono intercepto: as parcelas de origem já somam 1. Não há efeitos fixos de município ou UF. O município serve para separar os grupos na validação cruzada e no bootstrap.
+É linear nos coeficientes. Com zero urnas, sorteio uma matriz $\beta$ com **5 linhas e 4 colunas**, coeficientes positivos e soma 1 em cada linha. Depois dos primeiros votos, estimo uma matriz **5×2**, com as restrições descritas abaixo. Não adiciono intercepto: as parcelas de origem já somam 1. Não há efeitos fixos de município ou UF. O município define os grupos do bootstrap; não faço validação cruzada de uma penalização nesta versão sem prior.
 
 Esses são **coeficientes ecológicos**. Dados agregados por seção não identificam a decisão individual de cada eleitor.
 
@@ -137,23 +137,23 @@ A concentração **100 é uma escolha minha**, não o tamanho amostral da Quaest
 
 Com seções apuradas, passam a existir respostas observadas: $y_{id}=V_{2id}/N_i$, para $d$ igual a Lula ou Flávio. O denominador continua sendo o eleitorado apto do primeiro turno.
 
-Eu estimo a matriz minimizando:
+**Nesta etapa, não uso Quaest, sorteios de priors, calibração de participação ou penalização.** Estimo os coeficientes apenas com os resultados disponíveis no corte, por mínimos quadrados ponderados:
 
 $$
+\widehat\beta=\arg\min_\beta
 \frac12\sum_{i\in\mathcal A}w_i
-\sum_{d\in\{L,F\}}\left(y_{id}-\sum_gx_{ig}\beta_{gd}\right)^2
-+\lambda\sum_{g,d}\mu_{gd}\log\frac{\mu_{gd}}{\beta_{gd}},
+\sum_{d\in\{L,F\}}\left(y_{id}-\sum_gx_{ig}\beta_{gd}\right)^2,
 $$
 
-sujeito a $\beta_{gd}>0$ e $\sum_d\beta_{gd}=1$.
+sujeito a $\beta_{gL}\geq0$, $\beta_{gF}\geq0$ e $\beta_{gL}+\beta_{gF}\leq1$ em cada origem.
 
-Aqui, $\mathcal A$ é o conjunto de seções já apuradas; $w_i=N_i/\overline N$ é o peso por eleitorado; $\mu$ é a matriz de referência do prior; e $\lambda$ controla o peso da penalização. O primeiro termo é o erro de uma regressão ponderada. O segundo cobra um custo quando os coeficientes se afastam do prior.
+Aqui, $\mathcal A$ é o conjunto de seções já apuradas e $w_i=N_i/\overline N$ é o peso por eleitorado. São cinco explicativas e duas respostas. As restrições impedem votos negativos ou que a soma dos dois candidatos exceda os aptos. Não há parâmetro de penalização nem seleção de lambda. O ponto inicial do otimizador é uma constante neutra, sem depender de pesquisa eleitoral.
 
-Para quem vem da econometria frequentista, é útil pensar nisso como **mínimos quadrados com restrições e uma penalização informada pela pesquisa**. Eu escolho $\lambda$ por validação cruzada de cinco grupos de municípios, usando somente as seções disponíveis no corte. Nos dois cortes, a grade seleciona **0,001**.
+A matriz estimada tem **5 linhas e 2 colunas**. O que sobra em cada origem representa branco/nulo e ausência juntos; sem respostas desses destinos, não tento estimar sua separação. Isso difere da simulação com zero urnas, que usa uma matriz de quatro destinos construída a partir de hipóteses.
 
-Os destinos branco/nulo e ausência permanecem latentes: não crio respostas fictícias para eles. O ajuste usa apenas as respostas Lula/Flávio.
+Para representar variação amostral, faço **600 reamostragens dos municípios observados**, mantendo juntas as seções de cada município, e estimo a mesma regressão em cada uma. Os 600 coeficientes vêm desse bootstrap municipal, sem combinar cada ajuste com um prior. A distribuição inicial de 10.000 cenários e essa distribuição de 600 reajustes são procedimentos diferentes, não uma atualização bayesiana entre si.
 
-Para representar variação, faço 600 reamostragens dos municípios observados. Cada uma recebe uma matriz do prior e reestima os coeficientes. O valor de $\lambda$ fica fixo no selecionado pela validação. **Isso é uma combinação de prior e bootstrap, não uma amostra de um posterior bayesiano completo.** As faixas das tabelas descrevem esses cenários, não intervalos de confiança frequentistas ou cobertura eleitoral validada.
+A faixa de 95% resume os quantis dos bootstraps. O conjunto de municípios que chegou cedo não é uma amostra aleatória do país, então essa dispersão não cobre automaticamente o risco de extrapolar para locais ainda ausentes.
 
 ## Da regressão ao placar nacional
 
@@ -169,11 +169,11 @@ Divido o total previsto de Lula pela soma dos totais de Lula e Flávio em cada c
 
 ## E as curvas que se cruzam?
 
-![Trajetória projetada com o corte de 2%](figuras/trajetoria.png)
+![Trajetória projetada com o corte de menos de 1%](figuras/trajetoria.png)
 
 Resultado final e ordem de chegada são problemas diferentes. Para desenhar uma trajetória, preciso supor quais seções pendentes entrarão primeiro.
 
-O arquivo `ordem_hipotetica_origens.csv` traz apenas as somas acumuladas das cinco origens do **primeiro turno**, em uma ordem hipotética congelada no projeto original. Ela foi construída com cronologia histórica de 2022, horários do primeiro turno de 2026 e informações disponíveis no corte. Não contém votos futuros do segundo turno.
+Os arquivos `ordem_hipotetica_1pct.csv` e `ordem_hipotetica_2pct.csv` trazem apenas as somas acumuladas das cinco origens do **primeiro turno**, em uma ordem hipotética congelada no projeto original. Ela foi construída com cronologia histórica de 2022, horários do primeiro turno de 2026 e informações disponíveis em cada corte. No de 1%, as velocidades relativas foram fixadas em 1; no de 2%, houve seleção de velocidades usando contagens do prefixo. Não contém votos futuros do segundo turno.
 
 Este projeto enxuto **recebe essa ordem como insumo; não reestima sua seleção**. Recalcula todos os votos previstos e os acumula nessa ordem. A curva depende dessa hipótese e não deve ser apresentada como previsão exata do momento da virada. Já o percentual final independe da ordem de soma.
 
@@ -182,12 +182,12 @@ Este projeto enxuto **recebe essa ordem como insumo; não reestima sua seleção
 | Arquivo | O que faz |
 |---|---|
 | `reproduzir.py` | Lê os dados de cada etapa, executa as contas e salva as tabelas |
-| `modelo.py` | Sorteia o prior, calibra participação, estima a regressão e prevê votos |
+| `modelo.py` | Simula zero urnas com Quaest; estima WLS sem prior nos cortes com urnas |
 | `graficos.py` | Desenha distribuições e trajetória dos resultados recalculados |
 | `test_reproducao.py` | Testa isolamento dos cortes e rejeição de horários futuros |
 | `referencia.json` | Números publicados, usados apenas pela opção `--verificar` |
 | `dados/` | Cerca de 1 MB de extratos e identificação das fontes |
 
-Em `resultados/`, veja `previsoes.csv`, `coeficientes.csv`, `validacao_cruzada_1pct.csv`, `validacao_cruzada_2pct.csv`, os cenários individuais e os gráficos PNG/SVG. Os arquivos NPZ guardam as matrizes recalculadas.
+Em `resultados/`, veja `previsoes.csv`, `coeficientes.csv`, os cenários individuais e os gráficos PNG/SVG das distribuições e das duas trajetórias. Os arquivos NPZ guardam as matrizes recalculadas.
 
 Os dados eleitorais são extratos atribuídos ao TSE; a pesquisa é atribuída à Quaest. As URLs e os hashes estão em `dados/fontes.json`. A licença MIT cobre o código de minha autoria; não transfere direitos sobre os materiais das fontes.

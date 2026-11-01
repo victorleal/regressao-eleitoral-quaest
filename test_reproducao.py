@@ -37,10 +37,23 @@ class InformationCutTests(unittest.TestCase):
                 frame = pd.read_csv(path)
                 frame.loc[0, "apurada_em"] = "2026-10-25 23:59:59"
                 frame.to_csv(path, index=False)
-            return subprocess.run(
+            result = subprocess.run(
                 [sys.executable, str(root / "reproduzir.py"), "--corte", cut, "--verificar"],
                 cwd=root, capture_output=True, text=True, encoding="utf-8", timeout=90,
             )
+            if result.returncode == 0:
+                import numpy as np
+                import pandas as pd
+                with np.load(root / f"resultados/coeficientes_{cut}pct.npz") as arrays:
+                    np.testing.assert_allclose(arrays["beta_media"], arrays["beta"].mean(axis=0))
+                    self.assertEqual("beta_pontual" in arrays.files, cut != "0")
+                coefficients = pd.read_csv(root / "resultados/coeficientes.csv")
+                self.assertEqual(coefficients.beta_pontual.isna().all(), cut == "0")
+                if cut == "0":
+                    self.assertEqual(set(coefficients.metodo), {"Coeficientes sorteados com priors"})
+                else:
+                    self.assertEqual(set(coefficients.metodo), {"WLS restrita sem prior"})
+            return result
 
     def test_zero_sem_arquivos_de_apuracao(self):
         result = self.run_isolated("0")

@@ -10,7 +10,9 @@ import numpy as np
 ORIGENS = ["Lula", "Flávio", "Outros", "Branco/nulo", "Ausência"]
 DESTINOS = ["Lula", "Flávio", "Branco/nulo", "Ausência"]
 SEED_BOOTSTRAP = 20261029013
-N_CENARIOS = 600
+N_SORTEIOS_PARTICIPACAO = 100_000
+N_SIMULACOES = 10_000
+N_BOOTSTRAPS = 600
 
 
 def sortear_participacao(historico, primeiro_turno):
@@ -40,7 +42,7 @@ def sortear_participacao(historico, primeiro_turno):
     # Rejeito comparecimento impossível, em vez de truncá-lo nos limites.
     location, scale = predictive_parameters(change_attendance)
     chunks = []
-    remaining = 100_000
+    remaining = N_SORTEIOS_PARTICIPACAO
     while remaining:
         change = location + scale * rng_attendance.standard_t(2, size=remaining)
         attendance = attendance1 + total * change / 100
@@ -49,14 +51,15 @@ def sortear_participacao(historico, primeiro_turno):
         remaining -= int(keep.sum())
     attendance2 = attendance1 + total * np.concatenate(chunks) / 100
     location, scale = predictive_parameters(change_bn)
-    change = location + scale * rng_bn.standard_t(2, size=100_000)
+    change = location + scale * rng_bn.standard_t(2, size=N_SORTEIOS_PARTICIPACAO)
     t = logit(bn_rate1) + change
     exponential = np.exp(-np.abs(t))
     bn_rate2 = np.where(t >= 0, 1 / (1 + exponential), exponential / (1 + exponential))
     bn2 = attendance2 * bn_rate2
 
     # A mesma subamostra usada na publicação; a semente faz parte da reprodução.
-    chosen = np.random.default_rng(2026102802).choice(100_000, size=10_000, replace=False)
+    chosen = np.random.default_rng(2026102802).choice(
+        N_SORTEIOS_PARTICIPACAO, size=N_SIMULACOES, replace=False)
     return np.column_stack([attendance2 - bn2, bn2, total - attendance2])[chosen]
 
 
@@ -94,7 +97,7 @@ def calibrar_participacao(probabilities, origins, targets):
 
 
 def criar_prior(protocol, historico, primeiro_turno):
-    """Transforma as quatro linhas da Quaest em 10 mil matrizes beta (5 x 4).
+    """Sorteia coeficientes a partir da Quaest, sem estimar uma regressão.
 
     A agregação de Outros só ocorre depois da calibração, para preservar
     exatamente a contabilidade e os sorteios da versão publicada.
@@ -104,13 +107,13 @@ def criar_prior(protocol, historico, primeiro_turno):
     origins = np.array(list(atoms.values()), dtype=float)
     targets = sortear_participacao(historico, primeiro_turno)
     rng = np.random.default_rng(2026104803)
-    probabilities = np.empty((10_000, len(origins), 4))
+    probabilities = np.empty((N_SIMULACOES, len(origins), 4))
     for row in protocol["poll"]["rows"]:
         p_lula, p_flavio = row["lula"] / 100, row["flavio"] / 100
         residual = max(0.0, 1 - p_lula - p_flavio)
-        split = rng.beta(1.0, 1.0, 10_000)
+        split = rng.beta(1.0, 1.0, N_SIMULACOES)
         p = np.column_stack([
-            np.full(10_000, p_lula), np.full(10_000, p_flavio),
+            np.full(N_SIMULACOES, p_lula), np.full(N_SIMULACOES, p_flavio),
             residual * split, residual * (1 - split),
         ])
         # Gamma normalizada é uma forma de sortear a Dirichlet.
@@ -120,7 +123,7 @@ def criar_prior(protocol, historico, primeiro_turno):
             probabilities[:, names.index(member), :] = draw
 
     for origin, return_destination in [("A", 3), ("BN", 2)]:
-        q = rng.uniform(0, 1, 10_000)
+        q = rng.uniform(0, 1, N_SIMULACOES)
         i = names.index(origin)
         removed = (1 - q) * probabilities[:, i, :2].sum(axis=1)
         probabilities[:, i, :2] *= q[:, None]
@@ -197,7 +200,11 @@ def ajustar_sem_prior(G, H, start=None):
 
 
 def prever(beta, pending_origins, counted_lf):
-    """Votos já contados ficam fixos; beta só estima os votos pendentes."""
+    """Aplica os coeficientes às pendências e soma os votos contados fixos.
+
+    beta pode ter sido sorteado ou estimado. Esta função só calcula a
+    projeção; não estima coeficientes nem sorteia uma votação diretamente.
+    """
     future = np.einsum("o,bod->bd", pending_origins, beta)
     totals = future[:, :2] + counted_lf
     return 100 * totals[:, 0] / totals.sum(axis=1)
@@ -229,8 +236,8 @@ def atualizar_com_apuracao(frame, total_origins, progress=print):
     scale = Ng.sum() / Mg.sum()
     point, max_kkt = ajustar_sem_prior(Gg.sum(axis=0)/scale, Hg.sum(axis=0)/scale)
     multipliers = np.random.default_rng(SEED_BOOTSTRAP).multinomial(
-        n_clusters, np.full(n_clusters, 1/n_clusters), size=N_CENARIOS)
-    draws = np.empty((N_CENARIOS, 5, 2))
+        n_clusters, np.full(n_clusters, 1/n_clusters), size=N_BOOTSTRAPS)
+    draws = np.empty((N_BOOTSTRAPS, 5, 2))
     for j, mult in enumerate(multipliers):
         scale = float(mult @ Ng) / float(mult @ Mg)
         g = np.einsum("g,gij->ij", mult, Gg) / scale
@@ -238,7 +245,7 @@ def atualizar_com_apuracao(frame, total_origins, progress=print):
         draws[j], kkt = ajustar_sem_prior(g, h, start=point)
         max_kkt = max(max_kkt, kkt)
         if (j + 1) % 200 == 0:
-            progress(f"  {j + 1}/{N_CENARIOS} bootstraps concluídos")
+            progress(f"  {j + 1}/{N_BOOTSTRAPS} bootstraps concluídos")
     pending = total_origins - counts.sum(axis=0)
     counted = lf.sum(axis=0)
     return {"draws": draws, "point": point,

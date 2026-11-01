@@ -25,7 +25,7 @@ def resumo(cut, theta, result=None):
         "p025": float(np.quantile(theta, 0.025)), "p975": float(np.quantile(theta, 0.975)),
         "n_cenarios": len(theta), "acima_50": int((theta > 50).sum()),
         "fracao_acima_50_pct": float(100 * np.mean(theta > 50)),
-        "metodo": "Simulação com Quaest" if result is None else "WLS restrita sem prior",
+        "metodo": "Coeficientes sorteados com priors" if result is None else "WLS restrita sem prior",
         "previsao_pontual_pct": None if result is None else result["point_theta"],
         "secoes": 0 if result is None else result["n_sections"],
         "municipios": 0 if result is None else result["n_municipalities"],
@@ -78,7 +78,8 @@ def main():
     cuts = ["0", "1", "2"] if args.corte == "todos" else [args.corte]
     for cut in cuts:
         if cut == "0":
-            draws, point, theta = prior, prior.mean(axis=0), theta0
+            # Há coeficientes sorteados, mas nenhum coeficiente estimado.
+            draws, point, theta = prior, None, theta0
             result = None
         else:
             name = f"apuracao_{cut}pct.csv"
@@ -102,13 +103,19 @@ def main():
         else:
             assert draws.min() >= -1e-9 and draws.sum(axis=2).max() <= 1 + 1e-9
         scenarios[cut], matrices[cut] = theta, point
-        rows.append(resumo(cut, theta, result))
+        row = resumo(cut, theta, result)
+        rows.append(row)
         pd.DataFrame({"cenario": np.arange(1, len(theta)+1), "lula_pct": theta}).to_csv(output / f"cenarios_{cut}pct.csv", index=False)
-        np.savez_compressed(output / f"coeficientes_{cut}pct.npz", beta=draws, beta_pontual=point)
+        arrays = {"beta": draws, "beta_media": draws.mean(axis=0)}
+        if point is not None:
+            arrays["beta_pontual"] = point
+        np.savez_compressed(output / f"coeficientes_{cut}pct.npz", **arrays)
         for g, origin in enumerate(ORIGENS):
             for d, destination in enumerate(DESTINOS[:draws.shape[2]]):
                 coefficients.append({"corte": cut, "origem": origin, "destino": destination,
-                                     "beta_pontual": float(point[g, d]), "media_cenarios": float(draws[:, g, d].mean()),
+                                     "metodo": row["metodo"],
+                                     "beta_pontual": None if point is None else float(point[g, d]),
+                                     "media_cenarios": float(draws[:, g, d].mean()),
                                      "p025": float(np.quantile(draws[:, g, d], 0.025)), "p975": float(np.quantile(draws[:, g, d], 0.975))})
     table = pd.DataFrame(rows)
     table.to_csv(output / "previsoes.csv", index=False)

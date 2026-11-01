@@ -20,7 +20,12 @@ def salvar_distribuicoes(scenarios, output):
         ax.hist(theta, bins=edges, weights=weights, histtype="stepfilled", color=PURPLE, alpha=0.18)
         ax.hist(theta, bins=edges, weights=weights, histtype="step", color=PURPLE, linewidth=1.7)
         ax.axvline(50, color="#788494", linestyle="--", linewidth=1.2)
-        ax.set_title("Zero urnas" if cut == "0" else f"Após ≈{cut}% nacional")
+        ax.set_title("Zero urnas\nCoeficientes sorteados de priors" if cut == "0"
+                     else f"Após ≈{cut}% nacional\nWLS sem prior + bootstrap municipal", fontsize=10.5)
+        above = f"{int((theta > 50).sum()):,}".replace(",", ".")
+        n = f"{len(theta):,}".replace(",", ".")
+        ax.text(.035, .96, f"{above}/{n} acima de 50%", transform=ax.transAxes,
+                va="top", fontsize=9, color=PURPLE)
         ax.set_xlabel("Lula nos votos válidos (%)")
         ax.set_ylabel("Densidade")
         ax.set_xlim(low, high)

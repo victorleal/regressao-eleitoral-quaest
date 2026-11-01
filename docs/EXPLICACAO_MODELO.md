@@ -291,6 +291,10 @@ Boas referências:
 - Andrew Gelman et al., *Bayesian Data Analysis*
 - James, Witten, Hastie e Tibshirani, *An Introduction to Statistical Learning*
 
+Para um guia mais amplo sobre quando usar cada distribuição, como construir
+priors, escolher um modelo, validar previsões e fazer análise de sensibilidade,
+consulte [`GUIA_MODELAGEM_E_DISTRIBUICOES.md`](GUIA_MODELAGEM_E_DISTRIBUICOES.md).
+
 Para estudar este projeto em particular, leia nesta ordem:
 
 1. `README.md`;
